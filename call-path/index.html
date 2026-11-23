@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How Your Call Finds You</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Place a phone call and watch every SIP message, number lookup and audio stream it takes. Break one step and see how real calls fail.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column. A draggable network map on top, the SIP ladder (sequence chart) under it, then what happened and why. Teal = signalling, violet = audio, red = failure. */
+:root{
+  --bg:#f4f6f6; --surface:#ffffff; --fg:#162022; --muted:#58676b; --line:#d6dedf; --grid:#e7eded;
+  --sig:#0b7a75; --sig-soft:#dff1ef; --media:#6b4fd8; --media-soft:#ece8fb; --fail:#c0362c; --fail-soft:#fbe7e4; --node:#ffffff; --dim:#b3bfc1;
+  --display:"IBM Plex Sans Condensed","Arial Narrow",ui-sans-serif,sans-serif;
+  --body:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0e1415; --surface:#151d1f; --fg:#e4ecec; --muted:#93a4a7; --line:#2a3639; --grid:#1d2729;
+  --sig:#3cc4bc; --sig-soft:#123130; --media:#a993ff; --media-soft:#241e3d; --fail:#ff7a6e; --fail-soft:#3a1c19; --node:#1b2528; --dim:#3d4b4e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1415; --surface:#151d1f; --fg:#e4ecec; --muted:#93a4a7; --line:#2a3639; --grid:#1d2729;
+  --sig:#3cc4bc; --sig-soft:#123130; --media:#a993ff; --media-soft:#241e3d; --fail:#ff7a6e; --fail-soft:#3a1c19; --node:#1b2528; --dim:#3d4b4e; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
+main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+h1,h2{font-family:var(--display);text-wrap:balance;line-height:1.1;margin:0}
+h1{font-size:clamp(34px,6.5vw,54px);font-weight:700;letter-spacing:-.01em}
+h2{font-size:26px;font-weight:600;margin-top:18px}
+p{margin:0;max-width:65ch}
+.lede{font-size:19px;color:var(--muted)}
+.kicker{font-family:var(--mono);font-size:13px;color:var(--muted)}
+code,.mono{font-family:var(--mono);font-size:.9em}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+figcaption{font-size:14px;color:var(--muted)}
+.scen{display:flex;flex-wrap:wrap;gap:8px}
+.scen button{font-family:var(--body);font-size:14px;font-weight:500;padding:7px 12px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--fg);cursor:pointer}
+.scen button[aria-pressed="true"]{background:var(--sig);border-color:var(--sig);color:var(--surface)}
+.ctrl{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ctrl button{font-family:var(--body);font-size:14px;font-weight:600;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.ctrl button.go{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+button:focus-visible{outline:2px solid var(--sig);outline-offset:2px}
+.status{font-family:var(--mono);font-size:13px;color:var(--muted);margin-left:auto}
+.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+svg text{font-family:var(--body)}
+#net{width:100%;min-width:620px;height:auto;display:block;touch-action:none}
+#ladder{display:block;min-width:720px;width:100%;height:auto}
+.node{cursor:grab}
+.node:active{cursor:grabbing}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:3px;border-radius:2px;display:inline-block}
+.raw{font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:pre;overflow-x:auto;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:12px;margin:0;color:var(--fg)}
+.why{border-radius:10px;padding:14px 16px;display:flex;flex-direction:column;gap:6px}
+.why.ok{background:var(--sig-soft)} .why.bad{background:var(--fail-soft)}
+.why b{font-family:var(--display);font-size:19px;font-weight:600}
+.hl{background:var(--fail-soft);color:var(--fail);border-radius:3px;padding:0 2px}
+table{border-collapse:collapse;font-size:15px;width:100%}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--display);font-weight:600;font-size:15px}
+td code{white-space:nowrap}
+footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px}
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <a href="../" class="kicker" style="text-decoration:none">← Lab</a>
+    <span class="kicker">Telephony, a playable demo</span>
+    <h1>How your call finds you</h1>
+    <p class="lede">You dial a mobile number. Within a second or two, a phone somewhere starts ringing. Here's every message that made that happen, and the four ways it most often goes wrong.</p>
+  </header>
+
+  <figure>
+    <div class="scen" role="group" aria-label="What happens on this call">
+      <button data-s="ok" aria-pressed="true">Normal call</button>
+      <button data-s="stale" aria-pressed="false">Number just moved</button>
+      <button data-s="offline" aria-pressed="false">Phone is off</button>
+      <button data-s="busy" aria-pressed="false">Line is busy</button>
+      <button data-s="nat" aria-pressed="false">Behind a home router</button>
+      <button data-s="relay" aria-pressed="false">Router, fixed</button>
+    </div>
+    <div class="ctrl">
+      <button class="go" id="play">Call</button>
+      <button id="step">One step</button>
+      <button id="reset">Start over</button>
+      <span class="status" id="status" aria-live="polite">Ready</span>
+    </div>
+    <div class="scroll"><svg id="net" viewBox="0 0 900 370" role="img" aria-label="Network map of the call. Drag any box to move it."></svg></div>
+    <div class="legend">
+      <span><i class="sw" style="background:var(--sig)"></i>call setup (SIP)</span>
+      <span><i class="sw" style="background:var(--muted)"></i>number lookup</span>
+      <span><i class="sw" style="background:var(--media)"></i>your voices (RTP)</span>
+      <span><i class="sw" style="background:var(--fail)"></i>failed</span>
+    </div>
+    <figcaption>Drag any box. The wires follow.</figcaption>
+  </figure>
+
+  <div class="why ok" id="why"><b>Press Call</b><span>Pick what happens on this call above, then press Call. Every message shows up in the chart below.</span></div>
+
+  <h2>The ladder</h2>
+  <p>Telecom engineers draw calls like this. Each column is a machine, each arrow is one message, time runs down the page. Tap any arrow to read the message itself.</p>
+  <figure>
+    <div class="scroll"><svg id="ladder" viewBox="0 0 900 120" role="img" aria-label="Sequence of messages in the call"></svg></div>
+    <pre class="raw" id="raw">Tap an arrow to read the message.</pre>
+  </figure>
+
+  <h2>Who's in the room</h2>
+  <div class="scroll"><table>
+    <tr><th>Box</th><th>What it does</th></tr>
+    <tr><td>Your operator</td><td>Takes your call, checks you're allowed to make it, and works out where to send it. In SIP this is a proxy.</td></tr>
+    <tr><td>Number lookup</td><td>A copy of the shared list of every number that moved between operators. In the Netherlands every operator keeps one, fed from a central database the operators run together.</td></tr>
+    <tr><td>Their operator</td><td>Owns the number today. Its registrar remembers where each phone last checked in from, a bit like a coat check for addresses.</td></tr>
+    <tr><td>Old operator</td><td>Owned the number before it moved. If the lookup is out of date, your call ends up here.</td></tr>
+  </table></div>
+
+  <h2>The fix nobody sees</h2>
+  <p>The router case is the one engineers lose weekends to. The call connects, both phones show a timer, and only one of you can hear the other. The phone behind the router wrote its home address, <code>192.168.1.23</code>, into its message, and that address means nothing on the internet. The usual fix is a media relay at the operator: it rewrites that address to its own public one and passes the audio along. In OpenSIPS, for example, that's what modules like <code>rtpengine</code> and <code>nathelper</code> are for.</p>
+
+  <footer>A simplified call between two mobile networks over SIP. Real networks add more boxes (session border controllers, IMS, billing), but the ladder looks the same. Addresses use the ranges reserved for documentation, and the number is made up.</footer>
+</main>
+
+<script>
+(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = id => document.getElementById(id);
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const mk = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---------- network ----------
+  const nodes = {
+    you:    { label: 'Your phone',      sub: '+31 6 1111 2222',   x: 80,  y: 220 },
+    opA:    { label: 'Your operator',   sub: 'proxy',             x: 290, y: 220 },
+    lookup: { label: 'Number lookup',   sub: 'moved numbers',     x: 290, y: 60 },
+    old:    { label: 'Old operator',    sub: 'owned it before',   x: 590, y: 60 },
+    opB:    { label: 'Their operator',  sub: 'proxy + registrar', x: 590, y: 220 },
+    them:   { label: 'Their phone',     sub: '+31 6 1234 5678',   x: 820, y: 220 },
+  };
+  const order = ['you', 'opA', 'lookup', 'old', 'opB', 'them'];
+  const edges = [['you','opA'],['opA','lookup'],['opA','old'],['opA','opB'],['opB','them']];
+  const net = $('net');
+  const gEdges = mk('g', {}, net), gMedia = mk('g', {}, net), gNodes = mk('g', {}, net), gDots = mk('g', {}, net);
+  const edgeEls = edges.map(([a, b]) => ({ a, b, el: mk('line', { 'stroke-width': 2 }, gEdges) }));
+  const W = 132, H = 54;
+  for (const id in nodes) {
+    const n = nodes[id];
+    const g = mk('g', { class: 'node', tabindex: 0, 'aria-label': n.label }, gNodes);
+    n.rect = mk('rect', { x: -W/2, y: -H/2, width: W, height: H, rx: 10, 'stroke-width': 1.5 }, g);
+    n.t1 = mk('text', { y: -3, 'text-anchor': 'middle', 'font-size': 14, 'font-weight': 600 }, g); n.t1.textContent = n.label;
+    n.t2 = mk('text', { y: 15, 'text-anchor': 'middle', 'font-size': 11.5 }, g); n.t2.textContent = n.sub;
+    n.g = g;
+    drag(g, n);
+  }
+  function drag(g, n) {
+    let off = null;
+    const pt = e => { const p = net.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(net.getScreenCTM().inverse()); };
+    g.addEventListener('pointerdown', e => { const p = pt(e); off = { x: p.x - n.x, y: p.y - n.y }; g.setPointerCapture(e.pointerId); });
+    g.addEventListener('pointermove', e => { if (!off) return; const p = pt(e); n.x = Math.max(W/2, Math.min(900 - W/2, p.x - off.x)); n.y = Math.max(H/2, Math.min(370 - H/2, p.y - off.y)); layout(); });
+    g.addEventListener('pointerup', () => off = null);
+    g.addEventListener('keydown', e => { const d = { ArrowLeft: [-10,0], ArrowRight: [10,0], ArrowUp: [0,-10], ArrowDown: [0,10] }[e.key]; if (d) { e.preventDefault(); n.x += d[0]; n.y += d[1]; layout(); } });
+  }
+
+  // ---------- scenarios ----------
+  const NUM = '+31612345678', ME = '+31611112222';
+  const sip = (first, from, to, extra = '', sdpIp = null) => {
+    const lines = [first,
+      `Via: SIP/2.0/UDP ${from};branch=z9hG4bK74bf9`,
+      `From: <sip:${ME}@op-a.example>;tag=9fxced76sl`,
+      `To: <sip:${NUM}@op-a.example>${first.startsWith('INVITE') || first.startsWith('ACK') ? '' : ';tag=8321234356'}`,
+      'Call-ID: 3848276298220188511@op-a.example',
+      `CSeq: 1 ${first.startsWith('ACK') ? 'ACK' : 'INVITE'}`];
+    if (extra) lines.push(extra);
+    if (sdpIp) { lines.push('Content-Type: application/sdp', '', 'v=0', `o=- 2890844526 2890844526 IN IP4 ${sdpIp}`, 's=-', `c=IN IP4 ${sdpIp}`, 't=0 0', 'm=audio 49170 RTP/AVP 0 8', 'a=rtpmap:0 PCMU/8000'); }
+    else lines.push('Content-Length: 0');
+    return lines.join('\n');
+  };
+  const inv = (via, target) => sip(`INVITE sip:${NUM}@${target} SIP/2.0`, via, '', 'Max-Forwards: 69', '198.51.100.7');
+  const resp = (code, via, sdpIp) => sip(`SIP/2.0 ${code}`, via, '', '', sdpIp);
+  const ackm = via => sip(`ACK sip:${NUM}@op-b.example SIP/2.0`, via);
+
+  function build(s) {
+    const st = [];
+    const m = (from, to, label, kind = 'sip', raw = '') => st.push({ from, to, label, kind, raw });
+    const note = (at, label, kind = 'note') => st.push({ from: at, to: at, label, kind, raw: '' });
+    m('you', 'opA', 'INVITE', 'sip', inv('198.51.100.7:5060', 'op-a.example'));
+    m('opA', 'you', '100 Trying', 'sip', resp('100 Trying', '198.51.100.7:5060'));
+    m('opA', 'lookup', `Who has ${NUM}?`, 'lookup', `Lookup query\nnumber: ${NUM}\n\nNot SIP. A database question your operator asks before routing.`);
+    if (s === 'stale') {
+      m('lookup', 'opA', 'Old operator', 'lookup', `Lookup answer\nnumber: ${NUM}\nrouting: OLD-OPERATOR\n\nThe number moved yesterday. This copy of the list hasn't caught up yet.`);
+      m('opA', 'old', 'INVITE', 'sip', inv('op-a.example', 'old-op.example'));
+      m('old', 'opA', '404 Not Found', 'fail', resp('404 Not Found', 'op-a.example'));
+      m('opA', 'old', 'ACK', 'sip', ackm('op-a.example'));
+      m('opA', 'you', '404 Not Found', 'fail', resp('404 Not Found', '198.51.100.7:5060'));
+      note('you', '"This number is not in use"', 'failnote');
+      return st;
+    }
+    m('lookup', 'opA', 'Their operator', 'lookup', `Lookup answer\nnumber: ${NUM}\nrouting: OP-B\n\nMoved here from the old operator. The list is up to date.`);
+    m('opA', 'opB', 'INVITE', 'sip', inv('op-a.example', 'op-b.example'));
+    m('opB', 'opA', '100 Trying', 'sip', resp('100 Trying', 'op-a.example'));
+    if (s === 'offline') {
+      note('opB', 'Registrar: no phone checked in', 'failnote');
+      m('opB', 'opA', '480 Temporarily Unavailable', 'fail', resp('480 Temporarily Unavailable', 'op-a.example'));
+      m('opA', 'opB', 'ACK', 'sip', ackm('op-a.example'));
+      m('opA', 'you', '480 Temporarily Unavailable', 'fail', resp('480 Temporarily Unavailable', '198.51.100.7:5060'));
+      note('you', '"Not reachable", or voicemail', 'failnote');
+      return st;
+    }
+    const themIp = s === 'nat' || s === 'relay' ? '192.168.1.23' : '203.0.113.45';
+    note('opB', `Registrar: phone last seen at 203.0.113.45${s === 'nat' || s === 'relay' ? ' (its router)' : ''}`);
+    m('opB', 'them', 'INVITE', 'sip', inv('op-b.example', '203.0.113.45:5060'));
+    if (s === 'busy') {
+      m('them', 'opB', '486 Busy Here', 'fail', resp('486 Busy Here', 'op-b.example'));
+      m('opB', 'opA', '486 Busy Here', 'fail', resp('486 Busy Here', 'op-a.example'));
+      m('opA', 'you', '486 Busy Here', 'fail', resp('486 Busy Here', '198.51.100.7:5060'));
+      note('you', 'Busy tone', 'failnote');
+      return st;
+    }
+    m('them', 'opB', '180 Ringing', 'sip', resp('180 Ringing', 'op-b.example'));
+    m('opB', 'opA', '180 Ringing', 'sip', resp('180 Ringing', 'op-a.example'));
+    m('opA', 'you', '180 Ringing', 'sip', resp('180 Ringing', '198.51.100.7:5060'));
+    m('them', 'opB', '200 OK', 'sip', resp('200 OK', 'op-b.example', themIp));
+    if (s === 'relay') note('opB', 'Relay rewrites 192.168.1.23 → 203.0.113.10');
+    const seenIp = s === 'relay' ? '203.0.113.10' : themIp;
+    m('opB', 'opA', '200 OK', 'sip', resp('200 OK', 'op-a.example', seenIp));
+    m('opA', 'you', '200 OK', 'sip', resp('200 OK', '198.51.100.7:5060', seenIp));
+    m('you', 'opA', 'ACK', 'sip', ackm('198.51.100.7:5060'));
+    m('opA', 'opB', 'ACK', 'sip', ackm('op-a.example'));
+    m('opB', 'them', 'ACK', 'sip', ackm('op-b.example'));
+    st.push({ kind: 'media', mode: s, label: 'Audio', from: 'you', to: 'them',
+      raw: s === 'nat' ? 'Your phone sends audio to 192.168.1.23:49170.\nThat address only exists inside their home network, so the packets go nowhere.\n\nTheir phone sends audio to 198.51.100.7:49170, which works.\nResult: you hear them, they hear nothing.'
+         : s === 'relay' ? 'Both phones send audio to the relay at 203.0.113.10.\nThe relay learns the router\'s real address from the first packet that arrives and passes audio both ways.'
+         : 'Audio flows straight between the phones, both ways, as RTP over UDP.' });
+    return st;
+  }
+
+  const WHY = {
+    ok: ['ok', 'Connected', 'Two operators, one lookup, about a dozen messages. The audio then takes its own path, separate from the messages that set the call up.'],
+    stale: ['bad', 'The number moved, the routing didn\'t', 'Your operator asked its copy of the moved-numbers list, and that copy was a day old. The old operator no longer knows the number, so it answers 404. Moving a number is quick on paper. Every copy of the list has to catch up before every call finds you.'],
+    offline: ['bad', 'Nobody checked in', 'The number is right and the operator is right, but the phone hasn\'t told the registrar where it is. So the operator answers 480, and you hear "not reachable" or voicemail.'],
+    busy: ['bad', 'Busy', 'Everything found everything. The phone itself said no, with 486 Busy Here.'],
+    nat: ['bad', 'Connected, but only you can hear', 'The call set up fine, so both screens show a timer. Their phone sits behind a home router and wrote its inside address, 192.168.1.23, into the 200 OK. Your audio goes to that address and gets lost. Open the 200 OK below and look for the c= line.'],
+    relay: ['ok', 'Fixed by a relay', 'Their operator spotted the private address and swapped in its own relay. Both phones now send audio to the relay, which forwards it. Same call, one extra box, and it\'s the box most people never hear about.'],
+  };
+
+  // ---------- drawing ----------
+  let scen = 'ok', steps = build(scen), done = 0, timer = null, busy = false;
+  const col = k => css({ sip: '--sig', lookup: '--muted', fail: '--fail', failnote: '--fail', note: '--muted', media: '--media' }[k] || '--sig');
+  const involved = () => { const s = new Set(); steps.slice(0, done).forEach(x => { s.add(x.from); s.add(x.to); }); return s; };
+  const used = () => { const s = new Set(); steps.forEach(x => { if (x.kind !== 'media') { s.add(x.from); s.add(x.to); } }); return s; };
+
+  function layout() {
+    const u = used(), inv = involved();
+    const failed = steps.slice(0, done).some(x => x.kind === 'fail');
+    for (const e of edgeEls) {
+      const a = nodes[e.a], b = nodes[e.b];
+      e.el.setAttribute('x1', a.x); e.el.setAttribute('y1', a.y); e.el.setAttribute('x2', b.x); e.el.setAttribute('y2', b.y);
+      const active = u.has(e.a) && u.has(e.b) && steps.some(x => (x.from === e.a && x.to === e.b) || (x.from === e.b && x.to === e.a));
+      e.el.setAttribute('stroke', active ? css('--line') : css('--grid'));
+      e.el.setAttribute('stroke-dasharray', e.b === 'lookup' ? '5 5' : 'none');
+    }
+    for (const id in nodes) {
+      const n = nodes[id]; n.g.setAttribute('transform', `translate(${n.x},${n.y})`);
+      const on = u.has(id);
+      const bad = id === 'old' && scen === 'stale' && inv.has('old');
+      n.rect.setAttribute('fill', bad ? css('--fail-soft') : css('--node'));
+      n.rect.setAttribute('stroke', bad ? css('--fail') : inv.has(id) ? css('--sig') : on ? css('--line') : css('--grid'));
+      n.t1.setAttribute('fill', on ? css('--fg') : css('--dim')); n.t2.setAttribute('fill', on ? css('--muted') : css('--dim'));
+    }
+    drawMedia();
+  }
+
+  function drawMedia() {
+    gMedia.innerHTML = '';
+    const last = steps[done - 1];
+    if (!last || last.kind !== 'media') return;
+    const a = nodes.you, b = nodes.them, r = nodes.opB;
+    const lane = (p1, p2, dy, broken, label) => {
+      const mx = (p1.x + p2.x) / 2, my = Math.max(p1.y, p2.y) + 40 + dy;
+      const d = `M${p1.x},${p1.y + H/2} Q${mx},${my} ${p2.x},${p2.y + H/2}`;
+      const probe = mk('path', { d, fill: 'none' }, gMedia);
+      const len = probe.getTotalLength();
+      const upto = broken ? 0.55 : 1;
+      const pts = []; for (let i = 0; i <= 40; i++) { const q = probe.getPointAtLength(len * upto * i / 40); pts.push(`${q.x.toFixed(1)},${q.y.toFixed(1)}`); }
+      probe.remove();
+      const path = mk('polyline', { points: pts.join(' '), fill: 'none', stroke: broken ? css('--fail') : css('--media'), 'stroke-width': 2.5, 'stroke-dasharray': '8 6' }, gMedia);
+      if (!reduce) mk('animate', { attributeName: 'stroke-dashoffset', from: '28', to: '0', dur: '0.8s', repeatCount: 'indefinite' }, path);
+      const mid = pts[20].split(',').map(Number);
+      const t = mk('text', { x: mid[0], y: mid[1] + 16, 'text-anchor': 'middle', 'font-size': 12, fill: broken ? css('--fail') : css('--media') }, gMedia);
+      t.textContent = label;
+      if (broken) { const e = pts[40].split(',').map(Number); const x = mk('text', { x: e[0] + 4, y: e[1] + 6, 'font-size': 18, 'font-weight': 700, fill: css('--fail') }, gMedia); x.textContent = '✕'; }
+    };
+    if (last.mode === 'relay') { lane(a, r, 0, false, 'your voice, via the relay'); lane(r, b, 0, false, ''); lane(b, a, 55, false, 'their voice, via the relay'); }
+    else if (last.mode === 'nat') { lane(a, b, 0, true, 'your voice, sent to 192.168.1.23'); lane(b, a, 55, false, 'their voice, arrives'); }
+    else { lane(a, b, 0, false, 'your voice'); lane(b, a, 55, false, 'their voice'); }
+  }
+
+  // ladder
+  const lad = $('ladder'); const LX = id => 75 + order.indexOf(id) * 150; const ROW = 34, TOP = 50;
+  function drawLadder() {
+    lad.innerHTML = '';
+    const u = used();
+    const h = TOP + Math.max(steps.length, 3) * ROW + 30;
+    lad.setAttribute('viewBox', `0 0 900 ${h}`);
+    for (const id of order) {
+      const on = u.has(id);
+      mk('line', { x1: LX(id), y1: 34, x2: LX(id), y2: h - 10, stroke: on ? css('--line') : css('--grid'), 'stroke-width': 1.5 }, lad);
+      const t = mk('text', { x: LX(id), y: 20, 'text-anchor': 'middle', 'font-size': 13, 'font-weight': 600, fill: on ? css('--fg') : css('--dim') }, lad); t.textContent = nodes[id].label;
+    }
+    const defs = mk('defs', {}, lad);
+    for (const k of ['sip', 'lookup', 'fail', 'media']) {
+      const mkr = mk('marker', { id: 'ah-' + k, viewBox: '0 0 10 10', refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: 'auto-start-reverse' }, defs);
+      mk('path', { d: 'M0,0 L10,5 L0,10 z', fill: col(k) }, mkr);
+    }
+    steps.slice(0, done).forEach((s, i) => {
+      const y = TOP + i * ROW + 14;
+      const g = mk('g', { tabindex: 0, role: 'button', 'aria-label': s.label, style: 'cursor:pointer' }, lad);
+      mk('rect', { x: 0, y: y - 22, width: 900, height: ROW, fill: 'transparent' }, g);
+      if (s.kind === 'media') {
+        const x1 = LX('you'), x2 = LX('them');
+        const via = s.mode === 'relay' ? LX('opB') : null;
+        if (via) { mk('line', { x1, y1: y, x2: via, y2: y, stroke: col('media'), 'stroke-width': 2, 'stroke-dasharray': '6 4', 'marker-start': 'url(#ah-media)', 'marker-end': 'url(#ah-media)' }, g); mk('line', { x1: via, y1: y, x2, y2: y, stroke: col('media'), 'stroke-width': 2, 'stroke-dasharray': '6 4', 'marker-start': 'url(#ah-media)', 'marker-end': 'url(#ah-media)' }, g); }
+        else if (s.mode === 'nat') { mk('line', { x1, y1: y - 5, x2: (x1 + x2) / 2, y2: y - 5, stroke: col('fail'), 'stroke-width': 2, 'stroke-dasharray': '6 4' }, g); const xt = mk('text', { x: (x1 + x2) / 2 + 8, y: y - 1, 'font-size': 14, 'font-weight': 700, fill: col('fail') }, g); xt.textContent = '✕'; mk('line', { x1: x2, y1: y + 6, x2: x1, y2: y + 6, stroke: col('media'), 'stroke-width': 2, 'stroke-dasharray': '6 4', 'marker-end': 'url(#ah-media)' }, g); }
+        else mk('line', { x1, y1: y, x2, y2: y, stroke: col('media'), 'stroke-width': 2, 'stroke-dasharray': '6 4', 'marker-start': 'url(#ah-media)', 'marker-end': 'url(#ah-media)' }, g);
+        const t = mk('text', { x: (x1 + x2) / 2, y: y - 9, 'text-anchor': 'middle', 'font-size': 12.5, fill: col('media') }, g); t.textContent = s.mode === 'nat' ? 'Audio, one way only' : 'Audio, both ways';
+      } else if (s.from === s.to) {
+        const x = LX(s.from); const right = order.indexOf(s.from) >= 3; const t = mk('text', { x: right ? x - 10 : x + 10, y: y + 4, 'text-anchor': right ? 'end' : 'start', 'font-size': 12.5, 'font-style': 'italic', fill: col(s.kind) }, g); t.textContent = s.label;
+        mk('circle', { cx: x, cy: y, r: 4, fill: col(s.kind) }, g);
+      } else {
+        const x1 = LX(s.from), x2 = LX(s.to);
+        mk('line', { x1, y1: y, x2: x2 + (x2 > x1 ? -2 : 2), y2: y, stroke: col(s.kind), 'stroke-width': 2, 'stroke-dasharray': s.kind === 'lookup' ? '5 4' : 'none', 'marker-end': `url(#ah-${s.kind})` }, g);
+        const t = mk('text', { x: (x1 + x2) / 2, y: y - 7, 'text-anchor': 'middle', 'font-size': 12.5, 'font-family': 'IBM Plex Mono, monospace', fill: col(s.kind) }, g); t.textContent = s.label;
+      }
+      const show = () => { $('raw').innerHTML = esc(s.raw || s.label).replace(/192\.168\.1\.23/g, '<span class="hl">192.168.1.23</span>'); };
+      g.addEventListener('click', show); g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); show(); } });
+    });
+  }
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+
+  function dot(s) {
+    return new Promise(res => {
+      if (reduce || s.from === s.to || s.kind === 'media') return res();
+      const a = nodes[s.from], b = nodes[s.to];
+      const c = mk('circle', { r: 7, fill: col(s.kind) }, gDots);
+      const t = mk('text', { 'font-size': 12, 'font-family': 'IBM Plex Mono, monospace', 'text-anchor': 'middle', fill: col(s.kind) }, gDots); t.textContent = s.label.length > 22 ? s.label.slice(0, 20) + '…' : s.label;
+      const t0 = performance.now(), dur = 520;
+      const tick = now => {
+        const k = Math.min(1, (now - t0) / dur), e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2;
+        const x = a.x + (b.x - a.x) * e, y = a.y + (b.y - a.y) * e;
+        c.setAttribute('cx', x); c.setAttribute('cy', y); t.setAttribute('x', x); t.setAttribute('y', y - 12);
+        if (k < 1 && !fin) requestAnimationFrame(tick); else finish();
+      };
+      let fin = false; const finish = () => { if (fin) return; fin = true; c.remove(); t.remove(); res(); };
+      setTimeout(finish, dur + 150);
+      requestAnimationFrame(tick);
+    });
+  }
+
+  function showWhy(final) {
+    const w = $('why');
+    if (!final) { w.className = 'why ok'; w.innerHTML = `<b>Calling…</b><span>${done} of ${steps.length} steps</span>`; return; }
+    const [k, title, body] = WHY[scen]; w.className = 'why ' + k; w.innerHTML = `<b>${title}</b><span>${body}</span>`;
+  }
+  async function stepOnce() {
+    if (busy || done >= steps.length) return false;
+    busy = true; const s = steps[done];
+    await dot(s); done++; layout(); drawLadder();
+    if (s.raw) $('raw').innerHTML = esc(s.raw).replace(/192\.168\.1\.23/g, '<span class="hl">192.168.1.23</span>');
+    $('status').textContent = done >= steps.length ? 'Done' : `Step ${done} of ${steps.length}`;
+    showWhy(done >= steps.length); busy = false; return done < steps.length;
+  }
+  async function play() {
+    if (done >= steps.length) reset();
+    $('play').textContent = 'Calling…'; timer = true;
+    while (timer && await stepOnce()) await new Promise(r => setTimeout(r, reduce ? 60 : 160));
+    timer = null; $('play').textContent = 'Call again';
+  }
+  function reset() { timer = null; done = 0; gDots.innerHTML = ''; steps = build(scen); layout(); drawLadder(); $('status').textContent = 'Ready'; $('raw').textContent = 'Tap an arrow to read the message.'; $('play').textContent = 'Call'; const w = $('why'); w.className = 'why ok'; w.innerHTML = '<b>Press Call</b><span>Every message will show up in the chart below.</span>'; }
+  $('play').onclick = play; $('step').onclick = () => { timer = null; stepOnce(); }; $('reset').onclick = reset;
+  document.querySelectorAll('.scen button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.scen button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    scen = b.dataset.s; reset();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { layout(); drawLadder(); });
+  new MutationObserver(() => { layout(); drawLadder(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+  // complete at rest: show the finished normal call
+  steps = build(scen); done = steps.length; layout(); drawLadder(); showWhy(true);
+  $('status').textContent = 'Done'; $('play').textContent = 'Call again';
+})();
+</script>
+
+</html>

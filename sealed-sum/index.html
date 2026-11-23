@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Add Two Numbers You Can't See</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Encrypt two numbers on your device, let a server add them without reading them, and unlock the sum. Real Paillier encryption running in your browser.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a reading column with live figures between paragraphs; each figure splits "your device" (left, ink blue) from "the server" (right, amber). */
+:root{
+  --bg:#f7f8fa; --surface:#ffffff; --fg:#141a24; --muted:#5b6575; --line:#dde2ea;
+  --you:#1f4fd1; --you-soft:#e7eefc; --srv:#b45309; --srv-soft:#fbf0e2; --ok:#137a4a; --bad:#b42318;
+  --display:"Schibsted Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --body:"Inter",ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f131a; --surface:#161b24; --fg:#e8ecf2; --muted:#9aa5b5; --line:#2a3240;
+  --you:#7ea2ff; --you-soft:#1a2440; --srv:#f0a54a; --srv-soft:#2e2114; --ok:#4cc38a; --bad:#ff7b72; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f131a; --surface:#161b24; --fg:#e8ecf2; --muted:#9aa5b5; --line:#2a3240;
+  --you:#7ea2ff; --you-soft:#1a2440; --srv:#f0a54a; --srv-soft:#2e2114; --ok:#4cc38a; --bad:#ff7b72; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
+main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1,h2{font-family:var(--display);text-wrap:balance;line-height:1.15;margin:0}
+h1{font-size:clamp(32px,6vw,48px);font-weight:800;letter-spacing:-.02em}
+h2{font-size:24px;font-weight:700;margin-top:20px}
+p{margin:0;max-width:65ch}
+.lede{font-size:19px;color:var(--muted)}
+.kicker{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.mono{font-family:var(--mono)}
+.you{color:var(--you)} .srv{color:var(--srv)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+figcaption{font-size:14px;color:var(--muted)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:640px){.split{grid-template-columns:1fr}}
+.side{border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.side.you-s{background:var(--you-soft)} .side.srv-s{background:var(--srv-soft)}
+.side h3{margin:0;font-family:var(--display);font-size:15px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;gap:8px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label{font-size:14px;color:var(--muted)}
+input[type=number]{font-family:var(--mono);font-size:20px;width:9ch;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg)}
+input[type=number]:focus-visible,button:focus-visible,select:focus-visible{outline:2px solid var(--you);outline-offset:2px}
+button,select{font-family:var(--body);font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+button.primary{background:var(--you);border-color:var(--you);color:var(--bg)}
+button.server{background:var(--srv);border-color:var(--srv);color:var(--bg)}
+button:disabled{opacity:.5;cursor:wait}
+.cipher{font-family:var(--mono);font-size:11.5px;line-height:1.45;word-break:break-all;color:var(--muted);max-height:7.4em;overflow:auto;background:var(--surface);border-radius:8px;padding:8px;border:1px solid var(--line)}
+.strip{display:grid;grid-template-columns:repeat(64,1fr);height:22px;border-radius:5px;overflow:hidden}
+.strip i{display:block}
+.big{font-family:var(--mono);font-size:30px;font-weight:500}
+.tag{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.stat b{font-family:var(--mono);font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+.stat span{font-size:13px;color:var(--muted)}
+.verdict{font-weight:600}
+.verdict.ok{color:var(--ok)} .verdict.bad{color:var(--bad)}
+.lock{width:14px;height:14px;flex:none}
+.note{font-size:14px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px}
+.math{font-family:var(--mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+a{color:var(--you)}
+footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:6px}
+@media (prefers-reduced-motion:no-preference){.flash{animation:flash .6s ease}@keyframes flash{from{background:var(--srv-soft)}to{background:transparent}}}
+</style>
+
+<main>
+  <header style="display:flex;flex-direction:column;gap:12px">
+    <a href="../" class="kicker" style="text-decoration:none">← Lab</a>
+    <span class="kicker">Encrypted compute, a playable demo</span>
+    <h1>Add two numbers you can't see</h1>
+    <p class="lede">Your phone locks two numbers. A server adds them while they stay locked. Only your phone can open the answer. This is real encryption running in this tab, nothing is sent anywhere.</p>
+  </header>
+
+  <figure id="fig-hero" aria-label="Encrypted addition">
+    <div class="split">
+      <div class="side you-s">
+        <h3 class="you"><svg class="lock" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 7V5a4 4 0 1 1 8 0v2h1v8H3V7h1Zm2 0h4V5a2 2 0 1 0-4 0v2Z"/></svg>Your phone</h3>
+        <div class="row">
+          <label for="a">a</label><input id="a" type="number" min="0" max="99999999" value="1250">
+          <label for="b">b</label><input id="b" type="number" min="0" max="99999999" value="380">
+        </div>
+        <div class="row"><button class="primary" id="encrypt">Lock both</button><span class="tag" id="keyinfo">making a key…</span></div>
+        <div>
+          <div class="tag">Opened answer</div>
+          <div class="big you" id="result">?</div>
+          <div class="verdict" id="check"></div>
+        </div>
+      </div>
+      <div class="side srv-s">
+        <h3 class="srv">The server</h3>
+        <div class="tag">locked a</div><div class="strip" id="sa"></div>
+        <div class="tag">locked b</div><div class="strip" id="sb"></div>
+        <div class="row"><button class="server" id="add" disabled>Add them, still locked</button></div>
+        <div class="tag">locked a + b</div><div class="strip" id="ss"></div>
+        <div class="cipher" id="csum" aria-label="Locked sum as hex">Nothing yet.</div>
+      </div>
+    </div>
+    <div class="row"><button id="decrypt" disabled>Open the answer on your phone</button></div>
+    <figcaption>The coloured strips are the first 64 bytes of each locked number, drawn as colours. The server only ever has those bytes.</figcaption>
+  </figure>
+
+  <h2>Same number, a new lock every time</h2>
+  <p>If 1250 always locked to the same bytes, the server could just learn the pattern. So every lock mixes in a fresh random number. Press the button a few times and watch the strip change while the number underneath stays the same.</p>
+  <figure aria-label="Randomised encryption">
+    <div class="row"><label for="same">Number</label><input id="same" type="number" min="0" max="99999999" value="1250"><button class="primary" id="relock">Lock it again</button></div>
+    <div class="strip" id="r1"></div><div class="strip" id="r2"></div><div class="strip" id="r3"></div>
+    <figcaption id="relockcap">Three locks of the same number. Newest on top.</figcaption>
+  </figure>
+
+  <h2>What the server actually did</h2>
+  <p>There's no secret trick on the server. It multiplied the two locked numbers together. In this scheme, called Paillier after Pascal Paillier who published it in 1999, multiplying the locks adds the numbers inside them.</p>
+  <div class="math">lock(a) × lock(b) mod n² = lock(a + b)</div>
+  <p>It can also multiply a locked number by a plain number it knows, which is enough for totals, averages and weighted sums. Try asking it to add 21% VAT to your locked a.</p>
+  <figure aria-label="Scaling by a public number">
+    <div class="row"><button class="server" id="vat" disabled>Server: lock(a) to the power 121</button><button id="vatopen" disabled>Open it</button></div>
+    <div class="big you" id="vatres">?</div>
+    <figcaption>Your phone opens 121 × a and divides by 100 itself. The server never learns a, or the answer.</figcaption>
+  </figure>
+
+  <h2>What happens if the server tries to peek</h2>
+  <p>Say the server guesses a key. Here it builds its own key of the same size and uses it to open the locked sum.</p>
+  <figure aria-label="Wrong key">
+    <div class="row"><button class="server" id="peek" disabled>Open with a guessed key</button></div>
+    <div class="cipher" id="peekres" style="white-space:pre-wrap">Lock something first.</div>
+    <figcaption>The wrong key gives a huge meaningless number, not something close to the real answer.</figcaption>
+  </figure>
+
+  <h2>The price of the lock</h2>
+  <p>None of this is free. A small number becomes a big block of bytes, and the server's work grows fast with the key size. These numbers are measured in your browser right now.</p>
+  <figure aria-label="Cost">
+    <div class="row"><label for="bits">Key size</label>
+      <select id="bits"><option value="512">512 bits (toy, breakable)</option><option value="1024">1024 bits (too weak today)</option><option value="2048">2048 bits (today's minimum)</option></select>
+      <button id="rekey">Make a new key</button></div>
+    <div class="stats">
+      <div class="stat"><b id="st-plain">4 B</b><span>number in plain form</span></div>
+      <div class="stat"><b id="st-cipher">–</b><span>same number, locked</span></div>
+      <div class="stat"><b id="st-key">–</b><span>making the key</span></div>
+      <div class="stat"><b id="st-enc">–</b><span>locking one number</span></div>
+      <div class="stat"><b id="st-add">–</b><span>adding while locked</span></div>
+    </div>
+    <figcaption>A plain addition takes a few nanoseconds. Making the key and locking are the slow parts. Pick 2048 and compare.</figcaption>
+  </figure>
+
+  <h2>What it can't do</h2>
+  <p>Paillier can add, and it can multiply by numbers the server already knows. It can't multiply two locked numbers together, and it can't compare them. That's enough for a sum of invoices. It isn't enough to run an AI model, which needs both, millions of times.</p>
+  <p>Schemes that can do both are called fully homomorphic encryption. Craig Gentry showed the first one in 2009. They work today, at a much higher price than the one above. How much higher, and whether that's fine for something like masking names in a legal document, is what the rest of this series measures.</p>
+
+  <footer>
+    <span>Everything runs in this page with JavaScript BigInt and your browser's random number generator. It's a teaching demo, not a crypto library, so don't use this code to protect real data.</span>
+    <span>Paillier, P. (1999). Public-Key Cryptosystems Based on Composite Degree Residuosity Classes. EUROCRYPT '99.</span>
+  </footer>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  // ---------- BigInt helpers ----------
+  const randBits = bits => {
+    const bytes = new Uint8Array(Math.ceil(bits / 8));
+    crypto.getRandomValues(bytes);
+    let x = 0n; for (const v of bytes) x = (x << 8n) | BigInt(v);
+    return x & ((1n << BigInt(bits)) - 1n);
+  };
+  const randBelow = n => { const bits = n.toString(2).length; let x; do { x = randBits(bits); } while (x >= n || x === 0n); return x; };
+  const modpow = (b, e, m) => { let r = 1n; b %= m; while (e > 0n) { if (e & 1n) r = r * b % m; b = b * b % m; e >>= 1n; } return r; };
+  const gcd = (a, b) => { while (b) [a, b] = [b, a % b]; return a; };
+  const modinv = (a, m) => { let [r0, r1, s0, s1] = [a % m, m, 1n, 0n]; while (r1) { const q = r0 / r1; [r0, r1] = [r1, r0 - q * r1]; [s0, s1] = [s1, s0 - q * s1]; } return ((s0 % m) + m) % m; };
+  const SMALL = [3n,5n,7n,11n,13n,17n,19n,23n,29n,31n,37n,41n,43n,47n,53n,59n,61n,67n,71n,73n,79n,83n,89n,97n];
+  const isProbablePrime = n => {
+    for (const p of SMALL) { if (n === p) return true; if (n % p === 0n) return false; }
+    let d = n - 1n, s = 0; while (!(d & 1n)) { d >>= 1n; s++; }
+    for (let i = 0; i < 24; i++) {
+      const a = 2n + randBelow(n - 3n);
+      let x = modpow(a, d, n); if (x === 1n || x === n - 1n) continue;
+      let comp = true; for (let j = 1; j < s; j++) { x = x * x % n; if (x === n - 1n) { comp = false; break; } }
+      if (comp) return false;
+    }
+    return true;
+  };
+  const randPrime = bits => { for (;;) { let c = randBits(bits) | (1n << BigInt(bits - 1)) | 1n; if (isProbablePrime(c)) return c; } };
+
+  // ---------- Paillier ----------
+  const keygen = bits => {
+    let p, q, n;
+    do { p = randPrime(bits / 2); q = randPrime(bits / 2); n = p * q; } while (p === q || gcd(n, (p - 1n) * (q - 1n)) !== 1n);
+    const lambda = (p - 1n) * (q - 1n) / gcd(p - 1n, q - 1n);
+    const n2 = n * n; const mu = modinv(lambda, n);
+    return { n, n2, lambda, mu, bits };
+  };
+  const enc = (k, m) => { let r; do { r = randBelow(k.n); } while (gcd(r, k.n) !== 1n); return ((1n + (m % k.n) * k.n) % k.n2) * modpow(r, k.n, k.n2) % k.n2; };
+  const dec = (k, c) => ((modpow(c, k.lambda, k.n2) - 1n) / k.n) * k.mu % k.n;
+  const add = (k, c1, c2) => c1 * c2 % k.n2;
+  const scale = (k, c, s) => modpow(c, s, k.n2);
+
+  // ---------- drawing ----------
+  const hex = x => x.toString(16);
+  const bytesOf = x => { const h = hex(x).padStart(2 * Math.ceil(hex(x).length / 2), '0'); const out = []; for (let i = 0; i < h.length; i += 2) out.push(parseInt(h.slice(i, i + 2), 16)); return out; };
+  const drawStrip = (el, x) => {
+    el.innerHTML = '';
+    if (x == null) return;
+    const b = bytesOf(x).slice(0, 64);
+    for (const v of b) { const i = document.createElement('i'); i.style.background = `hsl(${Math.round(v / 255 * 300)} 55% ${38 + (v % 5) * 6}%)`; el.appendChild(i); }
+  };
+  const fmtMs = ms => ms < 1 ? `${(ms * 1000).toFixed(0)} µs` : ms < 1000 ? `${ms.toFixed(ms < 10 ? 1 : 0)} ms` : `${(ms / 1000).toFixed(1)} s`;
+  const fmtNum = x => x.toLocaleString('en-US');
+  const readNum = el => { let v = Math.floor(Number(el.value)); if (!Number.isFinite(v) || v < 0) v = 0; if (v > 99999999) v = 99999999; el.value = v; return BigInt(v); };
+  const timeIt = (fn, reps = 1) => { const t = performance.now(); let r; for (let i = 0; i < reps; i++) r = fn(); return [r, (performance.now() - t) / reps]; };
+
+  // ---------- state ----------
+  let key = null, ca = null, cb = null, cs = null, cv = null, a = 0n, b = 0n;
+  const setBusy = on => ['encrypt','add','decrypt','vat','vatopen','peek','relock','rekey'].forEach(id => { if (on) $(id).disabled = true; });
+  const refreshButtons = () => {
+    $('encrypt').disabled = !key; $('relock').disabled = !key; $('rekey').disabled = false;
+    $('add').disabled = !ca; $('decrypt').disabled = !cs; $('vat').disabled = !ca; $('vatopen').disabled = !cv; $('peek').disabled = !cs;
+  };
+  const resetLocks = () => { ca = cb = cs = cv = null; ['sa','sb','ss','r1','r2','r3'].forEach(id => drawStrip($(id), null)); $('csum').textContent = 'Nothing yet.'; $('result').textContent = '?'; $('check').textContent = ''; $('vatres').textContent = '?'; $('peekres').textContent = 'Lock something first.'; };
+
+  const makeKey = bits => new Promise(res => {
+    setBusy(true); $('keyinfo').textContent = `making a ${bits}-bit key…`; $('st-key').textContent = '…';
+    setTimeout(() => {
+      const [k, ms] = timeIt(() => keygen(bits));
+      key = k; $('keyinfo').textContent = `${bits}-bit key, kept on this phone`;
+      $('st-key').textContent = fmtMs(ms);
+      const [c, encMs] = timeIt(() => enc(key, 1250n), 5);
+      const c2 = enc(key, 380n);
+      const [, addMs] = timeIt(() => add(key, c, c2), 200);
+      $('st-cipher').textContent = `${Math.ceil(key.n2.toString(2).length / 8)} B`;
+      $('st-enc').textContent = fmtMs(encMs); $('st-add').textContent = fmtMs(addMs);
+      resetLocks(); refreshButtons(); res();
+    }, 30);
+  });
+
+  const lockBoth = () => {
+    a = readNum($('a')); b = readNum($('b'));
+    ca = enc(key, a); cb = enc(key, b); cs = cv = null;
+    drawStrip($('sa'), ca); drawStrip($('sb'), cb); drawStrip($('ss'), null);
+    $('csum').textContent = 'Locked a and b are on the server. Press add.'; $('result').textContent = '?'; $('check').textContent = ''; $('vatres').textContent = '?';
+    refreshButtons();
+  };
+  $('encrypt').onclick = lockBoth;
+  $('a').onchange = $('b').onchange = () => { if (key) lockBoth(); };
+  $('add').onclick = () => {
+    cs = add(key, ca, cb); drawStrip($('ss'), cs);
+    const el = $('csum'); el.textContent = hex(cs); el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+    refreshButtons();
+  };
+  $('decrypt').onclick = () => {
+    const s = dec(key, cs); $('result').textContent = fmtNum(s);
+    const ok = s === a + b; const c = $('check');
+    c.textContent = ok ? `Matches ${fmtNum(a)} + ${fmtNum(b)}` : 'Does not match'; c.className = 'verdict ' + (ok ? 'ok' : 'bad');
+  };
+  $('vat').onclick = () => { cv = scale(key, ca, 121n); $('vatres').textContent = 'locked, the server can\'t read it'; refreshButtons(); };
+  $('vatopen').onclick = () => { const v = dec(key, cv); const whole = v / 100n, cents = v % 100n; $('vatres').textContent = `${fmtNum(a)} + 21% = ${fmtNum(whole)}.${cents.toString().padStart(2,'0')}`; };
+  $('peek').onclick = () => {
+    $('peekres').textContent = 'guessing a key…';
+    setTimeout(() => { const fake = keygen(key.bits); const g = dec(fake, cs % fake.n2); $('peekres').textContent = `Wrong key opens it as ${g.toString()}\nReal answer is ${fmtNum(a + b)}.`; }, 30);
+  };
+  const relock = () => {
+    const v = readNum($('same')); const c = enc(key, v);
+    const s1 = $('r1'), s2 = $('r2'), s3 = $('r3');
+    s3.innerHTML = s2.innerHTML; s2.innerHTML = s1.innerHTML; drawStrip(s1, c);
+    $('relockcap').textContent = `Each strip is ${fmtNum(v)}, locked with a different random number. Newest on top.`;
+  };
+  $('relock').onclick = relock;
+  $('rekey').onclick = () => makeKey(Number($('bits').value));
+  $('bits').onchange = () => makeKey(Number($('bits').value));
+
+  makeKey(512).then(() => { lockBoth(); $('add').click(); $('decrypt').click(); relock(); relock(); relock(); });
+})();
+</script>
+
+</html>
