@@ -23,6 +23,7 @@
   --bg:#0e1415; --surface:#151d1f; --fg:#e4ecec; --muted:#93a4a7; --line:#2a3639; --grid:#1d2729;
   --sig:#3cc4bc; --sig-soft:#123130; --media:#a993ff; --media-soft:#241e3d; --fail:#ff7a6e; --fail-soft:#3a1c19; --node:#1b2528; --dim:#3d4b4e; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.6;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
 main{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
@@ -61,6 +62,20 @@ table{border-collapse:collapse;font-size:15px;width:100%}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{font-family:var(--display);font-weight:600;font-size:15px}
 td code{white-space:nowrap}
+.shift{background:var(--fg);color:var(--bg);border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.shift .pager{font-family:var(--mono);font-size:13px;opacity:.75;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.shift h2{margin:0;font-size:24px}
+.shift q{font-family:var(--display);font-size:21px;font-weight:600;line-height:1.3;quotes:"“" "”"}
+.shift p{color:inherit;opacity:.85;font-size:15px}
+.ans{display:flex;flex-wrap:wrap;gap:8px}
+.ans button{font-family:var(--body);font-size:14px;font-weight:600;padding:8px 12px;border-radius:8px;border:1px solid color-mix(in srgb,var(--bg) 35%,transparent);background:transparent;color:var(--bg);cursor:pointer}
+.ans button:hover{background:color-mix(in srgb,var(--bg) 12%,transparent)}
+.ans button.right{background:var(--sig);border-color:var(--sig);color:var(--fg)}
+.ans button.wrong{background:var(--fail);border-color:var(--fail);color:var(--surface)}
+.ans button:disabled{cursor:default}
+.shift .start{align-self:flex-start;font-family:var(--body);font-size:15px;font-weight:700;padding:10px 16px;border-radius:8px;border:0;background:var(--sig);color:var(--fg);cursor:pointer}
+.shift .fbk{font-size:15px;line-height:1.5}
+.shift .fbk b{font-family:var(--display);font-size:18px}
 footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px}
 </style>
 
@@ -69,7 +84,7 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
     <a href="../" class="kicker" style="text-decoration:none">← Lab</a>
     <span class="kicker">Telephony, a playable demo</span>
     <h1>How your call finds you</h1>
-    <p class="lede">You dial a mobile number. Within a second or two, a phone somewhere starts ringing. Here's every message that made that happen, and the four ways it most often goes wrong.</p>
+    <p class="lede">You dial a mobile number. Within a second or two, a phone somewhere starts ringing. Here's every message that made that happen, and the four ways it most often goes wrong. Or take the night shift and fix five broken calls.</p>
   </header>
 
   <figure>
@@ -96,6 +111,17 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
     </div>
     <figcaption>Drag any box. The wires follow.</figcaption>
   </figure>
+
+
+  <section class="shift" id="shift" aria-live="polite">
+    <div class="pager"><span id="sh-head">Night shift, network operations</span><span id="sh-score">Score 0</span></div>
+    <h2 id="sh-title">Five tickets tonight</h2>
+    <p id="sh-intro">Each ticket replays the customer's call on the map above. Read the ladder and the messages, then say what broke. Faster answers score more.</p>
+    <q id="sh-quote" hidden></q>
+    <div class="ans" id="sh-ans"></div>
+    <div class="fbk" id="sh-fb" hidden></div>
+    <button class="start" id="sh-go">Start shift</button>
+  </section>
 
   <div class="why ok" id="why"><b>Press Call</b><span>Pick what happens on this call above, then press Call. Every message shows up in the chart below.</span></div>
 
@@ -357,26 +383,27 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
     });
   }
 
-  function showWhy(final) {
+  let showWhy = function (final) {
     const w = $('why');
     if (!final) { w.className = 'why ok'; w.innerHTML = `<b>Calling…</b><span>${done} of ${steps.length} steps</span>`; return; }
     const [k, title, body] = WHY[scen]; w.className = 'why ' + k; w.innerHTML = `<b>${title}</b><span>${body}</span>`;
   }
   async function stepOnce() {
     if (busy || done >= steps.length) return false;
-    busy = true; const s = steps[done];
-    await dot(s); done++; layout(); drawLadder();
+    busy = true; const s = steps[done]; const e = epoch;
+    await dot(s); if (e !== epoch) return false; done++; layout(); drawLadder();
     if (s.raw) $('raw').innerHTML = esc(s.raw).replace(/192\.168\.1\.23/g, '<span class="hl">192.168.1.23</span>');
     $('status').textContent = done >= steps.length ? 'Done' : `Step ${done} of ${steps.length}`;
     showWhy(done >= steps.length); busy = false; return done < steps.length;
   }
+  let gen = 0, epoch = 0;
   async function play() {
     if (done >= steps.length) reset();
-    $('play').textContent = 'Calling…'; timer = true;
-    while (timer && await stepOnce()) await new Promise(r => setTimeout(r, reduce ? 60 : 160));
-    timer = null; $('play').textContent = 'Call again';
+    const my = ++gen; timer = my; $('play').textContent = 'Calling…';
+    while (timer === my && await stepOnce()) await new Promise(r => setTimeout(r, reduce ? 60 : 160));
+    if (timer === my) { timer = null; $('play').textContent = 'Call again'; }
   }
-  function reset() { timer = null; done = 0; gDots.innerHTML = ''; steps = build(scen); layout(); drawLadder(); $('status').textContent = 'Ready'; $('raw').textContent = 'Tap an arrow to read the message.'; $('play').textContent = 'Call'; const w = $('why'); w.className = 'why ok'; w.innerHTML = '<b>Press Call</b><span>Every message will show up in the chart below.</span>'; }
+  function reset() { epoch++; busy = false; timer = null; done = 0; gDots.innerHTML = ''; steps = build(scen); layout(); drawLadder(); $('status').textContent = 'Ready'; $('raw').textContent = 'Tap an arrow to read the message.'; $('play').textContent = 'Call'; const w = $('why'); w.className = 'why ok'; w.innerHTML = '<b>Press Call</b><span>Every message will show up in the chart below.</span>'; }
   $('play').onclick = play; $('step').onclick = () => { timer = null; stepOnce(); }; $('reset').onclick = reset;
   document.querySelectorAll('.scen button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.scen button').forEach(x => x.setAttribute('aria-pressed', x === b));
@@ -384,6 +411,76 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { layout(); drawLadder(); });
   new MutationObserver(() => { layout(); drawLadder(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+
+  // ---------- night shift game ----------
+  let quiz = false;
+  const _showWhy = showWhy;
+  showWhy = final => { if (quiz) { const w = $('why'); w.className = 'why ok'; w.innerHTML = `<b>Ticket open</b><span>${done} of ${steps.length} messages so far. Tap arrows in the ladder to read them.</span>`; return; } _showWhy(final); };
+  const TICKETS = {
+    stale: '"My sister gave me her number last week. Now a voice says it doesn\'t exist."',
+    offline: '"I keep calling my dad. It never even rings."',
+    busy: '"I called the bakery three times before eight. Nothing."',
+    nat: '"I can hear her perfectly. She just keeps saying hello? hello? and hangs up."',
+    ok: '"My calls to the office never work. Can you check?"',
+  };
+  const ANS = [['stale', 'Number moved, lookup is stale'], ['offline', 'Their phone is off'], ['busy', 'Line is busy'], ['nat', 'Home router hides the address'], ['ok', 'Nothing broke']];
+  const HINT = { stale: 'Look at who answered the INVITE. It was the old operator, with 404.', offline: 'Their operator answered 480 before any phone was asked. The registrar had no phone checked in.', busy: 'The phone itself answered 486 Busy Here.', nat: 'Everything said 200 OK, but open it. The c= line has a 192.168 address.', ok: 'Ringing, 200 OK, audio both ways. This call was fine. Maybe the office just didn\'t pick up.' };
+  const FIX = [['Ask her to restart the phone', false], ['Put a media relay in the path', true], ['Port the number again', false]];
+  let queue = [], tIdx = 0, score = 0, t0 = 0, answered = false;
+  const SHIFT_TIMES = ['23:48', '00:31', '01:57', '03:12', '04:40'];
+  const scenRow = document.querySelector('.scen');
+  async function startTicket() {
+    answered = false;
+    const k = queue[tIdx];
+    $('sh-head').textContent = `Ticket ${tIdx + 1} of ${queue.length} · ${SHIFT_TIMES[tIdx]}`;
+    $('sh-title').textContent = 'New ticket'; $('sh-intro').hidden = true;
+    $('sh-quote').hidden = false; $('sh-quote').textContent = TICKETS[k].replace(/^"|"$/g, '');
+    $('sh-fb').hidden = true; $('sh-go').hidden = true;
+    const box = $('sh-ans'); box.innerHTML = '';
+    ANS.forEach(([id, label]) => { const b = document.createElement('button'); b.textContent = label; b.onclick = () => answer(id, b); box.appendChild(b); });
+    scen = k; reset(); t0 = performance.now();
+    $('net').scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    await play();
+  }
+  function answer(id, btn) {
+    if (answered) return; answered = true;
+    const k = queue[tIdx]; const secs = (performance.now() - t0) / 1000;
+    const ok = id === k; const pts = ok ? Math.max(20, 100 - Math.floor(secs / 3) * 5) : 0;
+    score += pts;
+    document.querySelectorAll('#sh-ans button').forEach(b => { b.disabled = true; if (b.textContent === ANS.find(a => a[0] === k)[1]) b.classList.add('right'); });
+    if (!ok) btn.classList.add('wrong');
+    $('sh-score').textContent = `Score ${score}`;
+    const fb = $('sh-fb'); fb.hidden = false;
+    fb.innerHTML = `<b>${ok ? `Solved in ${secs.toFixed(0)} s, +${pts}` : 'Not this one'}</b><br>${HINT[k]}`;
+    if (ok && k === 'nat') {
+      fb.innerHTML += '<br><br><b>Bonus, +50.</b> How do you fix it for good?';
+      const box = $('sh-ans'); box.innerHTML = '';
+      FIX.forEach(([label, good]) => { const b = document.createElement('button'); b.textContent = label; b.onclick = async () => {
+        document.querySelectorAll('#sh-ans button').forEach(x => x.disabled = true);
+        b.classList.add(good ? 'right' : 'wrong');
+        if (good) { score += 50; $('sh-score').textContent = `Score ${score}`; }
+        fb.innerHTML = `<b>${good ? 'Fixed, +50' : 'That won\'t help'}</b><br>${good ? 'The relay swaps the home address for its own and passes audio both ways. Watch it work.' : 'Restarting or porting doesn\'t change the address the phone writes. A media relay at the operator does. Watch it work.'}`;
+        nextBtn(); scen = 'relay'; reset(); await play();
+      }; box.appendChild(b); });
+      return;
+    }
+    nextBtn();
+  }
+  function nextBtn() { const g = $('sh-go'); g.hidden = false; g.textContent = tIdx < queue.length - 1 ? 'Next ticket' : 'End shift'; }
+  function endShift() {
+    quiz = false; scenRow.hidden = false;
+    const max = queue.length * 100 + 50;
+    const rank = score >= 420 ? 'Seen-it-all at 3am. The pager fears you.' : score >= 280 ? 'Solid on-call. Coffee earned.' : 'Rookie shift. Every engineer has one, read the ladder slower next time.';
+    $('sh-head').textContent = 'Shift over · 05:30'; $('sh-title').textContent = `${score} of ${max} points`;
+    $('sh-quote').hidden = true; $('sh-ans').innerHTML = ''; $('sh-intro').hidden = false; $('sh-intro').textContent = rank;
+    $('sh-fb').hidden = true; $('sh-go').hidden = false; $('sh-go').textContent = 'Another shift';
+    tIdx = -1; reset(); const ok = document.querySelector('[data-s=ok]'); document.querySelectorAll('.scen button').forEach(x => x.setAttribute('aria-pressed', x === ok)); scen = 'ok'; reset();
+  }
+  $('sh-go').onclick = () => {
+    if (!quiz || tIdx === -1) { quiz = true; scenRow.hidden = true; queue = Object.keys(TICKETS).sort(() => Math.random() - .5); tIdx = 0; score = 0; $('sh-score').textContent = 'Score 0'; startTicket(); return; }
+    if (tIdx < queue.length - 1) { tIdx++; startTicket(); } else endShift();
+  };
 
   // complete at rest: show the finished normal call
   steps = build(scen); done = steps.length; layout(); drawLadder(); showWhy(true);

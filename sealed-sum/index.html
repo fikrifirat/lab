@@ -23,6 +23,7 @@
   --bg:#0f131a; --surface:#161b24; --fg:#e8ecf2; --muted:#9aa5b5; --line:#2a3240;
   --you:#7ea2ff; --you-soft:#1a2440; --srv:#f0a54a; --srv-soft:#2e2114; --ok:#4cc38a; --bad:#ff7b72; color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:17px;line-height:1.6;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 64px}
 main{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:28px}
@@ -63,6 +64,30 @@ button:disabled{opacity:.5;cursor:wait}
 .lock{width:14px;height:14px;flex:none}
 .note{font-size:14px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px}
 .math{font-family:var(--mono);font-size:14px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;white-space:nowrap}
+.game{display:flex;flex-direction:column;gap:14px}
+.ghead{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.lvl{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.score{font-family:var(--mono);font-size:14px;color:var(--srv)}
+.task{font-family:var(--display);font-size:21px;font-weight:700;line-height:1.25;text-wrap:balance}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.card{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;background:var(--srv-soft);min-width:0}
+.card .strip{grid-template-columns:repeat(32,1fr)}
+.card b{font-family:var(--mono);font-weight:500;font-size:14px}
+.card span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.choices{display:flex;flex-direction:column;gap:8px}
+.choices button{text-align:left;font-weight:500;font-size:15px;padding:10px 14px;line-height:1.35}
+.choices button.right{border-color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,var(--surface))}
+.choices button.wrong{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,var(--surface))}
+.fb{border-radius:10px;padding:12px 14px;font-size:15px;display:flex;flex-direction:column;gap:4px}
+.fb.ok{background:color-mix(in srgb,var(--ok) 12%,var(--surface))} .fb.bad{background:color-mix(in srgb,var(--bad) 10%,var(--surface))}
+.fb b{font-family:var(--display);font-size:17px}
+.twins{display:grid;grid-template-columns:1fr;gap:8px}
+.twin{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--surface);cursor:pointer;text-align:left;font:inherit;color:inherit}
+.twin .strip{height:18px}
+.twin.pick{border-color:var(--you);box-shadow:0 0 0 2px var(--you-soft)}
+.twin.same{border-color:var(--ok)}
+.twin em{font-style:normal;font-family:var(--mono);font-size:13px;color:var(--muted);min-width:5ch;text-align:right}
+.twin i.n{font-style:normal;font-family:var(--mono);font-size:13px;color:var(--muted)}
 a{color:var(--you)}
 footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);padding-top:18px;display:flex;flex-direction:column;gap:6px}
 @media (prefers-reduced-motion:no-preference){.flash{animation:flash .6s ease}@keyframes flash{from{background:var(--srv-soft)}to{background:transparent}}}
@@ -104,12 +129,25 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
     <figcaption>The coloured strips are the first 64 bytes of each locked number, drawn as colours. The server only ever has those bytes.</figcaption>
   </figure>
 
+
+  <h2>Your turn, be the server</h2>
+  <p>You get locked numbers and a job. You can't open them, you don't have the key. Pick the move, and the phone opens whatever you send back. A wrong move shows up right away.</p>
+  <figure class="game" id="game" aria-label="Server game">
+    <div class="ghead"><span class="lvl" id="g-lvl">Job 1 of 6</span><span class="score" id="g-score" aria-live="polite">0 jobs done right</span></div>
+    <div class="task" id="g-task">Loading…</div>
+    <div class="cards" id="g-cards"></div>
+    <div class="choices" id="g-choices"></div>
+    <div class="fb" id="g-fb" hidden></div>
+    <div class="row"><button class="primary" id="g-next" hidden>Next job</button></div>
+  </figure>
+
   <h2>Same number, a new lock every time</h2>
-  <p>If 1250 always locked to the same bytes, the server could just learn the pattern. So every lock mixes in a fresh random number. Press the button a few times and watch the strip change while the number underneath stays the same.</p>
-  <figure aria-label="Randomised encryption">
-    <div class="row"><label for="same">Number</label><input id="same" type="number" min="0" max="99999999" value="1250"><button class="primary" id="relock">Lock it again</button></div>
-    <div class="strip" id="r1"></div><div class="strip" id="r2"></div><div class="strip" id="r3"></div>
-    <figcaption id="relockcap">Three locks of the same number. Newest on top.</figcaption>
+  <p>If 1250 always locked to the same bytes, the server could just learn the pattern. So every lock mixes in a fresh random number. Try to beat that.</p>
+  <figure aria-label="Find the twins">
+    <div class="ghead"><span class="task" style="font-size:18px">Two of these four hold the same number. Which two?</span><span class="score" id="t-score">0 found in 0 tries</span></div>
+    <div class="twins" id="twins"></div>
+    <div class="row"><button class="primary" id="t-new">New round</button><span class="tag" id="t-msg">Tap two strips.</span></div>
+    <figcaption>If the lock leaked any pattern you'd win more often than 1 in 6. Keep score and see.</figcaption>
   </figure>
 
   <h2>What the server actually did</h2>
@@ -213,12 +251,12 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
 
   // ---------- state ----------
   let key = null, ca = null, cb = null, cs = null, cv = null, a = 0n, b = 0n;
-  const setBusy = on => ['encrypt','add','decrypt','vat','vatopen','peek','relock','rekey'].forEach(id => { if (on) $(id).disabled = true; });
+  const setBusy = on => ['encrypt','add','decrypt','vat','vatopen','peek','rekey'].forEach(id => { if (on) $(id).disabled = true; });
   const refreshButtons = () => {
-    $('encrypt').disabled = !key; $('relock').disabled = !key; $('rekey').disabled = false;
+    $('encrypt').disabled = !key; $('rekey').disabled = false;
     $('add').disabled = !ca; $('decrypt').disabled = !cs; $('vat').disabled = !ca; $('vatopen').disabled = !cv; $('peek').disabled = !cs;
   };
-  const resetLocks = () => { ca = cb = cs = cv = null; ['sa','sb','ss','r1','r2','r3'].forEach(id => drawStrip($(id), null)); $('csum').textContent = 'Nothing yet.'; $('result').textContent = '?'; $('check').textContent = ''; $('vatres').textContent = '?'; $('peekres').textContent = 'Lock something first.'; };
+  const resetLocks = () => { ca = cb = cs = cv = null; ['sa','sb','ss'].forEach(id => drawStrip($(id), null)); $('csum').textContent = 'Nothing yet.'; $('result').textContent = '?'; $('check').textContent = ''; $('vatres').textContent = '?'; $('peekres').textContent = 'Lock something first.'; };
 
   const makeKey = bits => new Promise(res => {
     setBusy(true); $('keyinfo').textContent = `making a ${bits}-bit key…`; $('st-key').textContent = '…';
@@ -231,7 +269,7 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
       const [, addMs] = timeIt(() => add(key, c, c2), 200);
       $('st-cipher').textContent = `${Math.ceil(key.n2.toString(2).length / 8)} B`;
       $('st-enc').textContent = fmtMs(encMs); $('st-add').textContent = fmtMs(addMs);
-      resetLocks(); refreshButtons(); res();
+      resetLocks(); refreshButtons(); if (window.__started) { loadLevel(); twinRound(); } window.__started = true; res();
     }, 30);
   });
 
@@ -260,17 +298,131 @@ footer{font-size:14px;color:var(--muted);border-top:1px solid var(--line);paddin
     $('peekres').textContent = 'guessing a key…';
     setTimeout(() => { const fake = keygen(key.bits); const g = dec(fake, cs % fake.n2); $('peekres').textContent = `Wrong key opens it as ${g.toString()}\nReal answer is ${fmtNum(a + b)}.`; }, 30);
   };
-  const relock = () => {
-    const v = readNum($('same')); const c = enc(key, v);
-    const s1 = $('r1'), s2 = $('r2'), s3 = $('r3');
-    s3.innerHTML = s2.innerHTML; s2.innerHTML = s1.innerHTML; drawStrip(s1, c);
-    $('relockcap').textContent = `Each strip is ${fmtNum(v)}, locked with a different random number. Newest on top.`;
+
+  // ---------- game: be the server ----------
+  const rnd = (lo, hi) => BigInt(lo + Math.floor(Math.random() * (hi - lo + 1)));
+  const fmtB = x => fmtNum(x);
+  const garbage = v => { const t = v.toString(); return t.length > 24 ? t.slice(0, 22) + '…' : t; };
+  const LEVELS = [
+    { task: v => `Two invoices came in. Send back their total.`, vars: ['a','b'], names: { a: 'invoice a', b: 'invoice b' },
+      choices: [
+        { t: 'Multiply the locks, lock(a) × lock(b)', ok: true, run: (k, c) => dec(k, c.a * c.b % k.n2) },
+        { t: 'Add the locks, lock(a) + lock(b)', run: (k, c) => dec(k, (c.a + c.b) % k.n2) },
+        { t: 'Open both and add them', refuse: 'You have no key. The server can\'t open anything.' } ],
+      want: v => v.a + v.b, why: 'In this lock, multiplying the boxes adds what\'s inside. Adding the boxes means nothing, which is why you got noise.' },
+    { task: v => `Three invoices now. Send back the total.`, vars: ['a','b','c'], names: { a: 'invoice a', b: 'invoice b', c: 'invoice c' },
+      choices: [
+        { t: 'lock(a) × lock(b), that\'s enough', run: (k, c) => dec(k, c.a * c.b % k.n2) },
+        { t: 'lock(a) × lock(b) × lock(c)', ok: true, run: (k, c) => dec(k, c.a * c.b % k.n2 * c.c % k.n2) },
+        { t: 'lock(a) to the power 3', run: (k, c) => dec(k, modpow(c.a, 3n, k.n2)) } ],
+      want: v => v.a + v.b + v.c, why: 'Every lock you multiply in adds one more number to the total. Power 3 gives 3 × a, a fun mistake.' },
+    { task: v => `Add 21% VAT to invoice a. You know the rate, you don't know a.`, vars: ['a'], names: { a: 'invoice a' }, scale: 100n,
+      choices: [
+        { t: 'lock(a) × lock(21)', run: (k, c) => dec(k, c.a * enc(k, 21n) % k.n2) * 100n },
+        { t: 'lock(a) to the power 121, the phone divides by 100', ok: true, run: (k, c) => dec(k, modpow(c.a, 121n, k.n2)) },
+        { t: 'lock(a) × 121', run: (k, c) => dec(k, c.a * 121n % k.n2) * 100n } ],
+      want: v => v.a * 121n, why: 'A power multiplies what\'s inside by a number you know. lock(21) only adds 21 euros, which is a different tax altogether.' },
+    { task: v => `Your boss wants the average of a and b.`, vars: ['a','b'], names: { a: 'salary a', b: 'salary b' }, scale: 2n,
+      choices: [
+        { t: 'Can\'t be done, division isn\'t allowed', refuse: 'It can be done. Think about who holds the key and can do the last step.' },
+        { t: 'lock(a) × lock(b), the phone divides by 2', ok: true, run: (k, c) => dec(k, c.a * c.b % k.n2) },
+        { t: 'lock(a) to the power ½', refuse: 'There\'s no "power ½" on a lock. Powers have to be whole numbers.' } ],
+      want: v => v.a + v.b, why: 'The server makes the total. The phone, which holds the key, does the last step. Splitting work like that is most of the craft.' },
+    { task: v => `Is salary a bigger than salary b? Answer yes or no.`, vars: ['a','b'], names: { a: 'salary a', b: 'salary b' },
+      choices: [
+        { t: 'Compare the coloured strips', refuse: 'The strips are random noise. A bigger number doesn\'t make a bigger or brighter strip.' },
+        { t: 'Make lock(a − b) and check if it\'s positive', refuse: 'You can make lock(a − b), but it\'s still locked. You can\'t see its sign.' },
+        { t: 'Can\'t be done with this lock', ok: true, none: true } ],
+      want: null, why: 'This lock can add, and that\'s it. Comparing needs a richer scheme, and that\'s where fully homomorphic encryption comes in.' },
+    { task: v => `Rent is a per month, for b months. Send back the total rent.`, vars: ['a','b'], names: { a: 'rent a', b: 'months b' }, small: { b: [6, 24] },
+      choices: [
+        { t: 'lock(a) × lock(b)', run: (k, c) => dec(k, c.a * c.b % k.n2) },
+        { t: 'lock(a) to the power lock(b)', run: (k, c) => dec(k, modpow(c.a, c.b, k.n2)) },
+        { t: 'Can\'t be done with this lock', ok: true, none: true } ],
+      want: null, why: 'You can multiply by a number you know, not by one that\'s locked. lock(a) × lock(b) gave you a + b. Multiplying two locked numbers is exactly what AI models do millions of times, and what this lock can\'t.' },
+  ];
+  let L = 0, right = 0, firstTry = true, vals = {}, locks = {};
+  const RANKS = [[6, 'Perfect. You\'d be hired to write the compiler.'], [4, 'Careful server. A couple of noisy answers, nothing leaked.'], [0, 'Nosy server. Good news, the lock held anyway.']];
+  function loadLevel() {
+    const lv = LEVELS[L]; firstTry = true;
+    vals = {}; locks = {};
+    for (const v of lv.vars) { const r = lv.small && lv.small[v]; vals[v] = r ? rnd(r[0], r[1]) : rnd(120, 4800); locks[v] = enc(key, vals[v]); }
+    $('g-lvl').textContent = `Job ${L + 1} of ${LEVELS.length}`;
+    $('g-task').textContent = lv.task(vals);
+    const cards = $('g-cards'); cards.innerHTML = '';
+    for (const v of lv.vars) {
+      const c = document.createElement('div'); c.className = 'card';
+      c.innerHTML = `<span>${lv.names[v]}</span><div class="strip"></div><b data-v="${v}">lock(${v}) = ?</b>`;
+      cards.appendChild(c); const st = c.querySelector('.strip'); drawStrip(st, locks[v]);
+      [...st.children].slice(32).forEach(x => x.remove());
+    }
+    const ch = $('g-choices'); ch.innerHTML = '';
+    lv.choices.forEach(o => { const b = document.createElement('button'); b.textContent = o.t; b.onclick = () => pick(o, b); ch.appendChild(b); });
+    $('g-fb').hidden = true; $('g-next').hidden = true;
+  }
+  function pick(o, btn) {
+    const lv = LEVELS[L]; const fb = $('g-fb'); fb.hidden = false;
+    let msg;
+    if (o.refuse) msg = o.refuse;
+    else if (o.run) {
+      const got = o.run(key, locks); const want = lv.want ? lv.want(vals) : null;
+      const show = lv.scale ? (got % lv.scale === 0n ? fmtB(got / lv.scale) : `${fmtB(got / lv.scale)}.${(got % lv.scale * 100n / lv.scale).toString().padStart(2, '0')}`) : null;
+      const shown = got > 10n ** 12n ? garbage(got) : (lv.scale ? show : fmtB(got));
+      msg = `The phone opened <span class="mono">${shown}</span>.` + (want != null && !o.ok ? ` It wanted ${lv.scale ? (want % lv.scale ? (Number(want) / Number(lv.scale)).toFixed(2) : fmtB(want / lv.scale)) : fmtB(want)}.` : '');
+      if (L === 5 && o.t === 'lock(a) × lock(b)') msg += ` That's a + b, not a × b.`;
+    } else msg = '';
+    if (o.ok) {
+      if (firstTry) right++;
+      btn.classList.add('right');
+      fb.className = 'fb ok'; fb.innerHTML = `<b>${firstTry ? 'Right first time' : 'Got it'}</b><span>${msg ? msg + ' ' : ''}${lv.why}</span>`;
+      document.querySelectorAll('#g-cards b').forEach(b => b.textContent = `${b.dataset.v} was ${fmtB(vals[b.dataset.v])}`);
+      document.querySelectorAll('#g-choices button').forEach(b => b.disabled = true);
+      $('g-next').hidden = false; $('g-next').textContent = L === LEVELS.length - 1 ? 'See how you did' : 'Next job';
+    } else {
+      firstTry = false; btn.classList.add('wrong'); btn.disabled = true;
+      fb.className = 'fb bad'; fb.innerHTML = `<b>Not quite</b><span>${msg}</span>`;
+    }
+    $('g-score').textContent = `${right} of ${LEVELS.length} right first time`;
+  }
+  $('g-next').onclick = () => {
+    if (L < LEVELS.length - 1) { L++; loadLevel(); return; }
+    const rank = RANKS.find(r => right >= r[0])[1];
+    $('g-lvl').textContent = 'Shift over'; $('g-task').textContent = `${right} of ${LEVELS.length} right first time. ${rank}`;
+    $('g-cards').innerHTML = ''; $('g-choices').innerHTML = ''; $('g-fb').hidden = true;
+    $('g-next').textContent = 'Play again'; $('g-next').onclick = () => { L = 0; right = 0; $('g-next').onclick = nextHandler; loadLevel(); $('g-score').textContent = '0 jobs done right'; };
   };
-  $('relock').onclick = relock;
+  const nextHandler = $('g-next').onclick;
+
+  // ---------- twin hunt ----------
+  let tFound = 0, tTries = 0, tPicks = [], tVals = [], tDone = false;
+  function twinRound() {
+    const base = rnd(100, 9999); const others = [rnd(100, 9999), rnd(100, 9999)];
+    tVals = [base, base, ...others].sort(() => Math.random() - .5); tPicks = []; tDone = false;
+    const box = $('twins'); box.innerHTML = '';
+    tVals.forEach((v, i) => {
+      const b = document.createElement('button'); b.className = 'twin'; b.setAttribute('aria-label', `Locked number ${i + 1}`);
+      b.innerHTML = `<i class="n">${i + 1}</i><div class="strip"></div><em>?</em>`;
+      drawStrip(b.querySelector('.strip'), enc(key, v));
+      b.onclick = () => twinPick(i, b); box.appendChild(b);
+    });
+    $('t-msg').textContent = 'Tap two strips.';
+  }
+  function twinPick(i, b) {
+    if (tDone || tPicks.includes(i)) return;
+    tPicks.push(i); b.classList.add('pick');
+    if (tPicks.length < 2) return;
+    tDone = true; tTries++;
+    const hit = tVals[tPicks[0]] === tVals[tPicks[1]]; if (hit) tFound++;
+    document.querySelectorAll('.twin').forEach((el, k) => { el.querySelector('em').textContent = fmtNum(tVals[k]); if (tVals.filter(x => x === tVals[k]).length === 2) el.classList.add('same'); });
+    $('t-msg').textContent = hit ? 'Lucky guess. The strips gave you nothing to go on.' : 'Missed. The twins look nothing alike.';
+    $('t-score').textContent = `${tFound} found in ${tTries} ${tTries === 1 ? 'try' : 'tries'}${tTries >= 6 ? `, chance says about ${(tTries / 6).toFixed(1)}` : ''}`;
+  }
+  $('t-new').onclick = twinRound;
+
   $('rekey').onclick = () => makeKey(Number($('bits').value));
   $('bits').onchange = () => makeKey(Number($('bits').value));
 
-  makeKey(512).then(() => { lockBoth(); $('add').click(); $('decrypt').click(); relock(); relock(); relock(); });
+  makeKey(512).then(() => { lockBoth(); $('add').click(); $('decrypt').click(); loadLevel(); twinRound(); });
 })();
 </script>
 
